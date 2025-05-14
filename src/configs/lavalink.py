@@ -1,18 +1,20 @@
-from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import discord
 import lavalink
 from lavalink.errors import ClientError
 
-from src.bot import Bot
 from src.configs.environment import get_environment_variables
+
+if TYPE_CHECKING:
+    from src.bot import Bot
 
 
 env = get_environment_variables()
 
 
 class LavalinkClient(discord.Client):
-    _instance: LavalinkClient = None
+    _instance: 'LavalinkClient' = None
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs):
@@ -21,7 +23,7 @@ class LavalinkClient(discord.Client):
 
         return cls._instance
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: 'Bot'):
         if self._initialized:
             return
 
@@ -75,7 +77,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
             'd': data
         })
 
-    async def connect(self) -> None:
+    async def connect(self, *args, **kwargs) -> None:
         if not self.channel:
             return
 
@@ -85,12 +87,11 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
 
         await self.channel.guild.change_voice_state(
             channel=self.channel,
-            reconnect=True,
             self_mute=False,
             self_deaf=True
         )
 
-    async def disconnect(self) -> None:
+    async def disconnect(self, *args, **kwargs) -> None:
         if self.channel:
             player = self.lavalink.player_manager.get(self.channel.guild.id)
             if player:

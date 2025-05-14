@@ -1,4 +1,3 @@
-from __future__ import annotations
 from typing import Literal
 
 from dataclasses import dataclass
@@ -23,10 +22,10 @@ class English(Language):
 
 @dataclass
 class Emoji:
-    SpeechBalloon = ':speech_balloon:'
-    SkipTrack = ':next_track:'
-    NoEntry = ':no_entry:'
-    MagRight = ':mag_right:'
-    Link = ':link:'
-    Pencil = ':pencil:'
-    Bookmark = ':bookmark:'
+    SpeechBalloon = '💬'
+    SkipTrack = '⏭️'
+    NoEntry = '⛔'
+    MagRight = '🔎'
+    Link = '🔗'
+    Pencil = '✏️'
+    Bookmark = '🔖'

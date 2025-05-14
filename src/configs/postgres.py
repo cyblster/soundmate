@@ -17,7 +17,7 @@ URI = f'postgresql+asyncpg://{env.PG_USER}:{env.PG_PASSWORD}@' \
       f'{env.PG_HOST}:{env.PG_PORT}/{env.PG_DB}'
 
 
-async_engine  = create_async_engine(URI, echo=env.DEBUG, future=True)
+async_engine = create_async_engine(URI, echo=env.DEBUG, future=True)
 async_session = async_sessionmaker(autocommit=False, bind=async_engine,
                                    expire_on_commit=False)
 

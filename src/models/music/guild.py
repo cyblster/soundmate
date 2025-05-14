@@ -1,4 +1,4 @@
-from __future__ import annotations
+from typing import List, TYPE_CHECKING
 
 from sqlalchemy import (
     String,
@@ -13,8 +13,11 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.dialects.postgresql import insert
 
-from src.configs.postgres import get_async_session
-from src.models import *
+from src.configs.postgres import async_session, get_async_session
+from src.models import BaseModel
+
+if TYPE_CHECKING:
+    from src.models import HistoryModel
 
 
 class GuildModel(BaseModel):
@@ -27,7 +30,7 @@ class GuildModel(BaseModel):
     queue_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     locale: Mapped[str] = mapped_column(String(length=2), nullable=False)
 
-    guild_history: Mapped[list[HistoryModel]] = relationship(back_populates='guild', lazy='selectin')
+    guild_history: Mapped[List['HistoryModel']] = relationship(back_populates='guild', lazy='selectin')
 
     @classmethod
     async def add(
@@ -38,7 +41,7 @@ class GuildModel(BaseModel):
         queue_message_id: int,
         locale: str
     ) -> None:
-        async with get_async_session() as db:
+        async with get_async_session() as session:
             query = (
                 insert(cls)
                 .values(
@@ -59,39 +62,39 @@ class GuildModel(BaseModel):
                 )
             )
 
-            await db.execute(query)
-            await db.commit()
+            await session.execute(query)
+            await session.commit()
 
     @classmethod
-    async def get_all(cls) -> list[GuildModel]:
-        async with get_async_session() as db:
+    async def get_all(cls) -> list['GuildModel']:
+        async with get_async_session() as session:
             query = (
                 select(cls)
             )
 
-            setup_models = (await db.execute(query)).all()
+            setup_models = (await session.execute(query)).all()
 
             return setup_models
 
     @classmethod
-    async def get(cls, guild_id: int) -> GuildModel:
-        async with get_async_session() as db:
+    async def get(cls, guild_id: int) -> 'GuildModel':
+        async with get_async_session() as session:
             query = (
                 select(cls)
                 .filter_by(guild_id=guild_id)
             )
 
-            setup_model = (await db.execute(query)).one_or_none()
+            setup_model = (await session.execute(query)).one_or_none()
 
             return setup_model
 
     @classmethod
     async def delete(cls, guild_id: int) -> None:
-        async with get_async_session() as db:
+        async with get_async_session() as session:
             query = (
                 delete(cls)
                 .filter_by(guild_id=guild_id)
             )
 
-            await db.execute(query)
-            await db.commit()
+            await session.execute(query)
+            await session.commit()

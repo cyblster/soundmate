@@ -1,11 +1,9 @@
-from __future__ import annotations
-from typing import Literal
+from typing import List, TYPE_CHECKING
 
 import discord
 import lavalink
 from discord.ext import commands
 
-from src.bot import Bot
 from src.configs.lavalink import (
     LavalinkClient,
     LavalinkVoiceClient,
@@ -18,18 +16,64 @@ from src.configs.lang import (
 from src.configs.logger import LogMessage
 from src.models import *
 
+if TYPE_CHECKING:
+    from src.bot import Bot
+
 
 Player = lavalink.DefaultPlayer
 
 
 class Music(commands.Cog):
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: 'Bot'):
         super().__init__()
 
         self.bot = bot
         self.lavalink = self.bot.lavalink
 
         self.lavalink.add_event_hooks(self)
+        self.bot.loop.create_task(self.register_ui())
+
+    async def register_ui(self):
+        await self.bot.wait_until_ready()
+
+        music_models = await GuildModel.get_all()
+        for music_model in music_models:
+            channel = self.bot.get_channel(music_model.channel_id)
+            if channel:
+                player_message = channel.get_partial_message(music_model.track_message_id)
+                if player_message:
+                    await player_message.edit(
+                        embed=NothingPlayEmbed(),
+                        view=NothingPlayView(self, channel.guild)
+                    )
+                    self.bot.add_view(
+                        view=NothingPlayView(self, channel.guild),
+                        message_id=player_message.id
+                    )
+                    self.bot.add_view(
+                        view=PlayNowView(self, channel.guild),
+                        message_id=player_message.id
+                    )
+                else:
+                    await GuildModel.delete(music_model.guild_id)
+                    raise commands.MessageNotFound('Player message not found')
+
+                queue_message = channel.get_partial_message(music_model.queue_message_id)
+                if queue_message:
+                    await queue_message.edit(
+                        embed=QueueEmbed(),
+                        view=QueueView(channel.guild.id)
+                    )
+                    self.bot.add_view(
+                        view=QueueView(channel.guild.id),
+                        message_id=queue_message.id
+                    )
+                else:
+                    await GuildModel.delete(music_model.guild_id)
+                    raise commands.MessageNotFound('Player message not found')
+            else:
+                await GuildModel.delete(music_model.guild_id)
+                raise commands.ChannelNotFound('Music channel not found')
 
     @discord.app_commands.command(
         name='setup',
@@ -53,16 +97,14 @@ class Music(commands.Cog):
 
         await interaction.response.send_message('Производится установка...', ephemeral=True)
 
-        player: LavalinkPlayer = self.lavalink.player_manager.get(interaction.guild_id)
-
         track_message = await interaction.channel.send(
             embed=NothingPlayEmbed(),
             view=NothingPlayView(self, interaction.guild)
         )
 
         queue_message = await interaction.channel.send(
-            embed=QueueEmbed(player.queue),
-            view=QueueView(self, interaction.guild)
+            embed=QueueEmbed(),
+            view=QueueView(interaction.guild_id)
         )
 
         await GuildModel.add(
@@ -167,8 +209,23 @@ class NothingPlayView(PlayView):
                 delete_after=10
             )
 
-        # await interaction.response.send_modal(OrderTrackModal(self.cog))
-        await interaction.response.pong() # TODO
+        await interaction.response.send_modal(OrderTrackModal(self.cog))
+
+
+class PlayNowView(NothingPlayView):
+    pass
+
+
+class OrderTrackModal(discord.ui.Modal):
+    def __init__(self, cog: Music):
+        self.cog = cog
+
+        super().__init__(title='Добавить трек в очередь', timeout=None)
+
+        self.add_item(discord.ui.TextInput(label='Введите строку для поиска или URL'))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
 
 class QueueView(discord.ui.View):
@@ -206,7 +263,7 @@ class NothingPlayEmbed(discord.Embed):
 
 
 class QueueEmbed(discord.Embed):
-    def __init__(self, queue: list[lavalink.AudioTrack]):
+    def __init__(self, queue: List[lavalink.AudioTrack] = None):
         super().__init__(title='Очередь')
 
         if queue:

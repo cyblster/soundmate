@@ -1,0 +1,66 @@
+version: "${BOT_VERSION:-1.0.0}"
+services:
+  soundmate-bot:
+    container_name: "soundmate-bot"
+    env_file: .env
+    environment:
+      TOKEN: ${BOT_TOKEN}
+      POSTGRES_HOST: ${PG_HOST}
+      POSTGRES_PORT: ${PG_PORT:-5432}
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB}
+      LAVALINK_HOST: ${LL_HOST}
+      LAVALINK_PORT: ${LL_PORT:-2333}
+      LAVALINK_REGION: ${LL_REGION}
+    build: .
+    depends_on:
+      soundmate-pg:
+        condition: service_healthy
+    restart: always
+    networks:
+      - soundmate-net
+
+  soundmate-pg:
+    container_name: "soundmate-pg"
+    image: postgres:15
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB}
+    ports:
+      - "${PG_PORT:-5432}:${PG_PORT:-5432}"
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - soundmate-net
+
+  soundmate-ll:
+    container_name: "soundmate-ll"
+    image: fredboat/lavalink:latest
+    env_file: .env
+    environment:
+      _JAVA_OPTIONS: "-Xmx256M"
+      SERVER_HOST: ${LL_HOST}
+      SERVER_PORT: ${LL_PORT:-2333}
+      LAVALINK_SERVER_PASSWORD: ${LL_PASSWORD}
+    ports:
+      - "${LL_PORT:-2333}:${LL_PORT:-2333}"
+    restart: always
+    networks:
+      - soundmate-net
+
+networks:
+  soundmate-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+    external: false

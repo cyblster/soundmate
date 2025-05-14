@@ -1,4 +1,4 @@
-from __future__ import annotations
+from typing import Union
 
 import logging
 from dataclasses import dataclass
@@ -12,10 +12,10 @@ env = get_environment_variables()
 class Formatter(logging.Formatter):
     def __init__(self):
         super().__init__(
-            class_=logging.Formatter,
             fmt='[%(asctime)s] %(name)s |%(levelname)s| - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S',
         )
+
 
 class StreamHandler(logging.StreamHandler):
     def __init__(self):
@@ -26,21 +26,23 @@ class StreamHandler(logging.StreamHandler):
 
 @dataclass
 class Log:
-    level: int | str
+    level: Union[int, str]
     text: str
 
     @classmethod
-    def format(cls, **kwargs) -> Log:
+    def format(cls, **kwargs) -> 'Log':
         return Log(cls.level, cls.text.format(**kwargs))
 
 
 class Logger(logging.Logger):
     def __init__(self):
+        super().__init__(name=env.BOT_TITLE)
+        
         self.addHandler(StreamHandler())
         self.setLevel(logging.DEBUG if env.DEBUG else logging.INFO)
 
-    def log(self, log: Log):
-        super().log(log.level, log.text)
+    def log(self, log: Log, *args, **kwargs):
+        super().log(log.level, log.text, *args, **kwargs)
 
 
 class LogMessage:

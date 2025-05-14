@@ -1,2 +1,2 @@
-from .history import HistoryModel
 from .guild import GuildModel
+from .history import HistoryModel

@@ -1,11 +1,11 @@
 import discord
 from discord.ext import commands
 
-from cogs import Music
-from configs.lavalink import LavalinkClient
-from configs.logger import Logger
-from configs.postgres import async_engine
-from models import BaseModel
+from src.cogs import Music
+from src.configs.lavalink import LavalinkClient
+from src.configs.logger import Logger
+from src.configs.postgres import async_engine
+from src.models import BaseModel
 
 
 class Bot(commands.Bot):
@@ -15,7 +15,7 @@ class Bot(commands.Bot):
             intents=discord.Intents.all()
         )
 
-        self.lavalink = LavalinkClient(self).lavalink
+        self.lavalink = None
 
         self.logger = Logger()
         self.logger_handler = self.logger.handlers[0]
@@ -44,6 +44,8 @@ class Bot(commands.Bot):
 
     async def on_ready(self) -> None:
         await self.wait_until_ready()
+
+        self.lavalink = LavalinkClient(self).lavalink
 
         await self.add_cog(Music(self))
 
