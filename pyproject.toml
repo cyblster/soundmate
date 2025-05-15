@@ -1,5 +1,5 @@
 [project]
-name = "tunebot"
+name = "soundmate"
 requires-python = ">=3.9"
 version = "1.0.0"
 dependencies = [

@@ -1,5 +1,7 @@
 from typing import Optional
 
+import re
+import requests
 from datetime import (
     datetime,
     timedelta,
@@ -21,5 +23,7 @@ def get_formatted_duration(duration: Optional[int]) -> str:
     return dt.strftime('%d:%H:%M:%S')
 
 
-def get_formatted_thumbnail(uri: str) -> str:
-    pass
+def get_hq_thumbnail(uri: str) -> str:
+    path = re.match(r".*/", uri).group(0)
+
+    return f'{path}hqdefault.jpg'

@@ -22,9 +22,6 @@ if TYPE_CHECKING:
     from src.bot import Bot
 
 
-Player = lavalink.DefaultPlayer
-
-
 class Music(commands.Cog):
     def __init__(self, bot: 'Bot'):
         super().__init__()
@@ -41,46 +38,51 @@ class Music(commands.Cog):
 
         guild_models = await GuildModel.get_all()
         for guild_model in guild_models:
-            channel = self.bot.get_channel(guild_model.channel_id)
-            if channel:
-                player_message = channel.get_partial_message(guild_model.player_message_id)
-                if player_message:
-                    await player_message.edit(
-                        embed=NothingPlayEmbed(),
-                        view=NothingPlayView(self, channel.guild)
-                    )
-                    self.bot.add_view(
-                        view=NothingPlayView(self, channel.guild),
-                        message_id=player_message.id
-                    )
-                    self.bot.add_view(
-                        view=PlayNowView(self, channel.guild),
-                        message_id=player_message.id
-                    )
-                else:
-                    await GuildModel.delete(guild_model.guild_id)
-                    raise commands.MessageNotFound('Player message not found')
+            player: LavalinkPlayer = await self.create_player(
+                guild_model.guild_id,
+                guild_model.channel_id
+            )
 
-                queue_message = channel.get_partial_message(guild_model.queue_message_id)
-                if queue_message:
-                    await queue_message.edit(
-                        embed=QueueEmbed(),
-                        view=QueueView(channel.guild.id)
-                    )
-                    self.bot.add_view(
-                        view=QueueView(channel.guild.id),
-                        message_id=queue_message.id
-                    )
-                else:
-                    raise commands.MessageNotFound('Player message not found')
+            player_message_id = await NothingPlayEmbed.update(self, player)
+            self.bot.add_view(
+                view=NothingPlayView(self, player.guild_id),
+                message_id=player_message_id
+            )
+            self.bot.add_view(
+                view=PlayNowView(self, player.guild_id),
+                message_id=player_message_id
+            )
 
-                await self.create_player(guild_model.guild_id, guild_model.channel_id)
-            else:
-                raise commands.ChannelNotFound('Music channel not found')
+            queue_message_id = await QueueEmbed.update(self, player)
+            self.bot.add_view(
+                view=QueueView(player.guild_id),
+                message_id=queue_message_id
+            )
 
-    async def create_player(self, guild_id: int, channel_id: int):
+    async def create_player(self, guild_id: int, channel_id: int) -> LavalinkPlayer:
         player: LavalinkPlayer = self.lavalink.player_manager.create(guild_id)
         player.store('channel_id', channel_id)
+
+        return player
+
+    async def add_to_queue(
+        self,
+        guild_id: int,
+        voice_channel: discord.VoiceChannel,
+        tracks: List[lavalink.AudioTrack],
+        requester: str
+    ):
+        player: LavalinkPlayer = self.lavalink.player_manager.get(guild_id)
+
+        for track in tracks:
+            player.add(track, requester=requester)
+
+        if not player.is_playing:
+            await voice_channel.connect(cls=LavalinkVoiceClient)
+            await player.play()
+
+        if player.queue:
+            await QueueEmbed.update(self, player)
 
     @discord.app_commands.command(
         name='setup',
@@ -131,36 +133,15 @@ class Music(commands.Cog):
             self.bot.logger.error(repr(error))
 
     @lavalink.listener(lavalink.TrackStartEvent)
-    async def on_track_start(self, event: lavalink.TrackStartEvent) -> None: # TODO
+    async def on_track_start(self, event: lavalink.TrackStartEvent) -> None:
         player: LavalinkPlayer = event.player
 
         guild = self.bot.get_guild(player.guild_id)
         if not guild:
             await self.lavalink.player_manager.destroy(event.player.guild_id)
 
-        guild_model = await GuildModel.get(player.guild_id)
-
-        channel = self.bot.get_channel(guild_model.channel_id)
-        if channel:
-            player_message = channel.get_partial_message(guild_model.player_message_id)
-            if player_message:
-                await player_message.edit(
-                    embed=PlayNowEmbed(player.current),
-                    view=PlayNowView(self, channel.guild.id)
-                )
-            else:
-                raise commands.MessageNotFound('Player message not found')
-
-            queue_message = channel.get_partial_message(guild_model.queue_message_id)
-            if queue_message:
-                await queue_message.edit(
-                    embed=QueueEmbed(player.queue),
-                    view=QueueView(channel.guild.id)
-                )
-            else:
-                raise commands.MessageNotFound('Player message not found')
-        else:
-            raise commands.ChannelNotFound('Music channel not found')
+        await PlayNowEmbed.update(self, player)
+        await QueueEmbed.update(self, player)
 
         await HistoryModel.add(
             player.guild_id,
@@ -305,15 +286,13 @@ class OrderTrackModal(discord.ui.Modal):
             if search_result.load_type == lavalink.LoadType.ERROR:
                 await interaction.delete_original_response()
                 raise commands.ObjectNotFound('Outdated YouTube plugin signature')
-            if search_result.load_type == lavalink.LoadType.PLAYLIST:
-                for track in search_result.tracks:
-                    player.add(track, requester=interaction.user.nick)
             else:
-                player.add(search_result.tracks[0], requester=interaction.user.nick)
-
-            if not player.is_playing:
-                await interaction.user.voice.channel.connect(cls=LavalinkVoiceClient)
-                await player.play()
+                await self.cog.add_to_queue(
+                    interaction.guild_id,
+                    interaction.user.voice.channel,
+                    search_result.tracks,
+                    interaction.user.nick
+                )
 
             await interaction.delete_original_response()
         else:
@@ -335,7 +314,10 @@ class TrackSelectView(discord.ui.View):
         self.add_item(TrackSelect(cog, interaction, tracks))
 
     async def on_timeout(self) -> None:
-        await self.interaction.delete_original_response()
+        try:
+            await self.interaction.delete_original_response()
+        except discord.NotFound:
+            pass
 
 
 class TrackSelect(discord.ui.Select):
@@ -400,6 +382,27 @@ class NothingPlayEmbed(discord.Embed):
             value='Чтобы воспроизвести трек, воспользуйтесь кнопкой **"Добавить"**.'
         )
 
+    @staticmethod
+    async def update(cog: Music, player: LavalinkPlayer):
+        guild_model = await GuildModel.get(player.guild_id)
+
+        channel = cog.bot.get_channel(guild_model.channel_id)
+        if channel:
+            player_message = channel.get_partial_message(guild_model.player_message_id)
+            if player_message:
+                await player_message.edit(
+                    embed=NothingPlayEmbed(),
+                    view=NothingPlayView(cog, player.guild_id)
+                )
+            else:
+                await GuildModel.delete(player.guild_id)
+                raise commands.MessageNotFound('Player message not found')
+        else:
+            await GuildModel.delete(player.guild_id)
+            raise commands.ChannelNotFound('Music channel not found')
+
+        return player_message.id
+
 
 class PlayNowEmbed(discord.Embed):
     def __init__(self, track: lavalink.AudioTrack):
@@ -408,7 +411,7 @@ class PlayNowEmbed(discord.Embed):
         self.colour = 15548997
 
         self.set_author(name=track.author)
-        self.set_image(url=track.uri)
+        self.set_image(url=utils.get_hq_thumbnail(track.artwork_url))
 
         self.add_field(
             name='Запрошено пользователем :',
@@ -422,6 +425,27 @@ class PlayNowEmbed(discord.Embed):
         )
 
         self.set_footer(text='YouTube')
+
+    @staticmethod
+    async def update(cog: Music, player: LavalinkPlayer) -> int:
+        guild_model = await GuildModel.get(player.guild_id)
+
+        channel = cog.bot.get_channel(guild_model.channel_id)
+        if channel:
+            player_message = channel.get_partial_message(guild_model.player_message_id)
+            if player_message:
+                await player_message.edit(
+                    embed=PlayNowEmbed(player.current),
+                    view=PlayNowView(cog, player.guild_id)
+                )
+            else:
+                await GuildModel.delete(player.guild_id)
+                raise commands.MessageNotFound('Player message not found')
+        else:
+            await GuildModel.delete(player.guild_id)
+            raise commands.ChannelNotFound('Music channel not found')
+
+        return player_message.id
 
 
 class TrackSelectEmbed(discord.Embed):
@@ -446,7 +470,7 @@ class QueueEmbed(discord.Embed):
         self.colour = 15548997
 
         if queue:
-            for i, track in enumerate(queue[:20], 1): # TODO
+            for i, track in enumerate(queue[:20], 1):
                 self.add_field(
                     name=f'**{i}.** {track.author}',
                     value=f'[{track.title}]({track.uri}) '
@@ -458,6 +482,27 @@ class QueueEmbed(discord.Embed):
                 name='В очереди ничего нет.',
                 value='Чтобы добавить трек в очередь, нажмите на кнопку **"Добавить"**.'
             )
+
+    @staticmethod
+    async def update(cog: Music, player: LavalinkPlayer) -> int:
+        guild_model = await GuildModel.get(player.guild_id)
+
+        channel = cog.bot.get_channel(guild_model.channel_id)
+        if channel:
+            queue_message = channel.get_partial_message(guild_model.queue_message_id)
+            if queue_message:
+                await queue_message.edit(
+                    embed=QueueEmbed(player.queue),
+                    view=QueueView(player.guild_id)
+                )
+            else:
+                await GuildModel.delete(player.guild_id)
+                raise commands.MessageNotFound('Queue message not found')
+        else:
+            await GuildModel.delete(player.guild_id)
+            raise commands.ChannelNotFound('Music channel not found')
+
+        return queue_message.id
 
 
 class HistoryEmbed(discord.Embed):
