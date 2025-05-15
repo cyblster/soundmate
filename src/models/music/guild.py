@@ -13,7 +13,7 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.dialects.postgresql import insert
 
-from src.configs.postgres import async_session, get_async_session
+from src.configs.postgres import get_async_session
 from src.models import BaseModel
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ class GuildModel(BaseModel):
     guild_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
 
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    track_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    player_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     queue_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     locale: Mapped[str] = mapped_column(String(length=2), nullable=False)
 
@@ -37,7 +37,7 @@ class GuildModel(BaseModel):
         cls,
         guild_id: int,
         channel_id: int,
-        track_message_id: int,
+        player_message_id: int,
         queue_message_id: int,
         locale: str
     ) -> None:
@@ -47,7 +47,7 @@ class GuildModel(BaseModel):
                 .values(
                     guild_id=guild_id,
                     channel_id=channel_id,
-                    track_message_id=track_message_id,
+                    player_message_id=player_message_id,
                     queue_message_id=queue_message_id,
                     locale=locale
                 )
@@ -55,7 +55,7 @@ class GuildModel(BaseModel):
                     index_elements=[cls.guild_id],
                     set_=dict(
                         channel_id=channel_id,
-                        track_message_id=track_message_id,
+                        player_message_id=player_message_id,
                         queue_message_id=queue_message_id,
                         locale=locale
                     )
@@ -72,9 +72,9 @@ class GuildModel(BaseModel):
                 select(cls)
             )
 
-            setup_models = (await session.execute(query)).all()
+            guild_models = (await session.execute(query)).scalars().all()
 
-            return setup_models
+            return guild_models
 
     @classmethod
     async def get(cls, guild_id: int) -> 'GuildModel':
@@ -84,7 +84,7 @@ class GuildModel(BaseModel):
                 .filter_by(guild_id=guild_id)
             )
 
-            setup_model = (await session.execute(query)).one_or_none()
+            setup_model = (await session.execute(query)).scalar_one_or_none()
 
             return setup_model
 

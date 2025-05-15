@@ -37,7 +37,7 @@ class Log:
 class Logger(logging.Logger):
     def __init__(self):
         super().__init__(name=env.BOT_TITLE)
-        
+
         self.addHandler(StreamHandler())
         self.setLevel(logging.DEBUG if env.DEBUG else logging.INFO)
 

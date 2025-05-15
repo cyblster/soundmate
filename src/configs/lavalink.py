@@ -56,7 +56,6 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
 
         self.lavalink = client.lavalink
         self.guild_id = voice_channel.guild.id
-        self._destroyed = False
 
     async def on_voice_server_update(self, data):
         await self.lavalink.voice_update_handler({
@@ -67,52 +66,47 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
     async def on_voice_state_update(self, data):
         channel_id = data['channel_id']
         if not channel_id:
-            await self._destroy()
+            await self._refresh()
             return
 
-        self.channel: discord.VoiceChannel = self.client.get_channel(int(channel_id))
+        self.channel: discord.VoiceChannel = self.client.get_channel(int(data['channel_id']))
 
         await self.lavalink.voice_update_handler({
             't': 'VOICE_STATE_UPDATE',
             'd': data
         })
 
-    async def connect(self, *args, **kwargs) -> None:
-        if not self.channel:
-            return
-
-        player = self.lavalink.player_manager.get(self.channel.guild.id)
-        if not player:
-            self.lavalink.player_manager.create(guild_id=self.channel.guild.id)
-
+    async def connect(
+        self,
+        *,
+        timeout: float,
+        reconnect: bool,
+        self_deaf: bool = True,
+        self_mute: bool = False
+    ) -> None:
+        self.lavalink.player_manager.create(guild_id=self.channel.guild.id)
         await self.channel.guild.change_voice_state(
             channel=self.channel,
-            self_mute=False,
-            self_deaf=True
+            self_deaf=self_deaf,
+            self_mute=self_mute
         )
 
-    async def disconnect(self, *args, **kwargs) -> None:
-        if self.channel:
-            player = self.lavalink.player_manager.get(self.channel.guild.id)
-            if player:
-                player.channel_id = None
+    async def disconnect(self, *, force: bool = True) -> None:
+        player = self.lavalink.player_manager.get(self.channel.guild.id)
 
-            await self.channel.guild.change_voice_state(channel=None)
-
-        await self._destroy()
-
-    async def _destroy(self):
-        self.cleanup()
-
-        if self._destroyed:
+        if not force and not player.is_connected:
             return
 
-        self._destroyed = True
+        await self.channel.guild.change_voice_state(channel=None)
 
-        try:
-            await self.lavalink.player_manager.destroy(self.guild_id)
-        except ClientError:
-            pass # TODO send logs
+        player.channel_id = None
+        await self._refresh()
+
+    async def _refresh(self):
+        self.cleanup()
+
+        player: LavalinkPlayer = self.lavalink.player_manager.get(self.guild_id)
+        await player.stop()
 
 
 class LavalinkPlayer(lavalink.DefaultPlayer):

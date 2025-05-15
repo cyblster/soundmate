@@ -15,10 +15,11 @@ services:
     image: postgres:15
     env_file: .env
     environment:
-      POSTGRES_PORT: ${PG_PORT:-5432}
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
+    ports:
+      - 5234:5432
     healthcheck:
         test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
         interval: 10s
@@ -32,13 +33,18 @@ services:
 
   soundmate-ll:
     container_name: "soundmate-ll"
-    image: fredboat/lavalink:latest
+    image: ghcr.io/lavalink-devs/lavalink:4
     env_file: .env
     environment:
       _JAVA_OPTIONS: "-Xmx256M"
       SERVER_HOST: ${LL_HOST}
-      SERVER_PORT: ${PG_PORT:-2333}
+      SERVER_PORT: ${LL_PORT:-2333}
       LAVALINK_SERVER_PASSWORD: ${LL_PASSWORD}
+    ports:
+      - 2333:2333
+    volumes:
+      - ./lavalink/application.yaml:/opt/Lavalink/application.yaml
+      - ./lavalink/plugins:/opt/Lavalink/plugins
     restart: always
     networks:
       - soundmate-net

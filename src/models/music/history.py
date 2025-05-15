@@ -30,9 +30,9 @@ class HistoryModel(BaseModel):
         nullable=False
     )
 
-    track_url: Mapped[str] = mapped_column(Text, nullable=False)
-    track_channel: Mapped[str] = mapped_column(Text, nullable=False)
-    track_title: Mapped[str] = mapped_column(Text, nullable=False)
+    author: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    uri: Mapped[str] = mapped_column(Text, nullable=False)
 
     guild: Mapped['GuildModel'] = relationship(back_populates='guild_history', lazy='joined')
 
@@ -40,18 +40,18 @@ class HistoryModel(BaseModel):
     async def add(
         cls,
         guild_id: int,
-        track_channel: str,
-        track_title: str,
-        track_url: str
+        author: str,
+        title: str,
+        uri: str
     ) -> None:
         async with get_async_session() as session:
             query = (
                 insert(cls)
                 .values(
                     guild_id=guild_id,
-                    track_channel=track_channel,
-                    track_title=track_title,
-                    track_url=track_url
+                    author=author,
+                    title=title,
+                    uri=uri
                 )
             )
 
@@ -68,6 +68,6 @@ class HistoryModel(BaseModel):
                 .order_by(cls.added.desc())
             )
 
-            history_models = (await session.execute(query)).all()
+            history_models = (await session.execute(query)).scalars().all()
 
             return history_models

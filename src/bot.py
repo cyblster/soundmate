@@ -52,7 +52,7 @@ class Bot(commands.Bot):
         await self.tree.sync()
 
     def is_connected_to_guild(self, guild_id) -> bool:
-        return self.lavalink.player_manager.get(guild_id) is not None
+        return guild_id in [vc.channel.guild.id for vc in self.voice_clients]
 
     def is_user_with_bot(self, user: discord.Member) -> bool:
-        return user.voice.channel in [vc.channel for vc in self.voice_clients]
+        return bool(self.get_guild(user.guild.id).voice_client)
