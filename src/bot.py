@@ -51,8 +51,12 @@ class Bot(commands.Bot):
 
         await self.tree.sync()
 
-    def is_connected_to_guild(self, guild_id) -> bool:
-        return guild_id in [vc.channel.guild.id for vc in self.voice_clients]
-
     def is_user_with_bot(self, user: discord.Member) -> bool:
-        return bool(self.get_guild(user.guild.id).voice_client)
+        voice_client = user.guild.voice_client
+        if not voice_client:
+            return False
+
+        if not self.is_user_connected(user):
+            return False
+
+        return user.voice.channel == voice_client.channel

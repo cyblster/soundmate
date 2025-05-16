@@ -139,7 +139,7 @@ class Music(commands.Cog):
         await interaction.delete_original_response()
 
     async def cog_command_error(self, ctx, error) -> None:
-        if isinstance(error, commands.CommandInvokeError):
+        if isinstance(error, commands.CommandError):
             self.bot.logger.error(repr(error))
 
     @commands.Cog.listener()
@@ -172,7 +172,9 @@ class Music(commands.Cog):
     async def on_track_start(self, event: lavalink.TrackStartEvent) -> None:
         player: LavalinkPlayer = event.player
 
-        await PlayNowEmbed.update(self, player)
+        if not player.last or player.current.identifier != player.last.identifier:
+            await PlayNowEmbed.update(self, player)
+
         await QueueEmbed.update(self, player)
 
         await HistoryModel.add(
@@ -181,6 +183,8 @@ class Music(commands.Cog):
             player.current.title,
             player.current.uri
         )
+
+        player.last = player.current
 
     @lavalink.listener(lavalink.QueueEndEvent)
     async def on_queue_end(self, event: lavalink.QueueEndEvent) -> None:
@@ -193,6 +197,11 @@ class Music(commands.Cog):
                 await voice_client.disconnect(force=True)
         else:
             raise PlayerChannelNotFound(self.bot, player.guild_id)
+
+    def is_connected(self, guild_id: int):
+        player: LavalinkPlayer = self.lavalink.player_manager.get(guild_id)
+
+        return player.is_connected
 
 
 class PlayView(discord.ui.View):
@@ -257,7 +266,7 @@ class NothingPlayView(PlayView):
                 ephemeral=True,
                 delete_after=10
             )
-        if self.cog.bot.is_connected_to_guild(interaction.guild_id) and not self.cog.bot.is_user_with_bot(interaction.user):
+        if self.cog.is_connected(interaction.guild_id) and not self.cog.bot.is_user_with_bot(interaction.user):
             return await interaction.response.send_message(
                 lang.BotAlreadyConnected.format(emoji=Emoji.NoEntry),
                 ephemeral=True,

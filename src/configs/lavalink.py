@@ -27,7 +27,7 @@ class LavalinkClient(discord.Client):
 
         super().__init__(intents=bot.intents)
 
-        self.lavalink = lavalink.Client(bot.user.id)
+        self.lavalink = lavalink.Client(bot.user.id, player=LavalinkPlayer)
 
         self.lavalink.add_node(
             host=env.LL_HOST,
@@ -108,4 +108,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
 
 
 class LavalinkPlayer(lavalink.DefaultPlayer):
-    pass
+    def __init__(self, guild_id, node):
+        super().__init__(guild_id, node)
+
+        self.last: lavalink.AudioTrack = None
