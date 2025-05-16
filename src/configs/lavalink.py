@@ -1,13 +1,11 @@
 from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.bot import Bot
 
 import discord
 import lavalink
-from lavalink.errors import ClientError
 
 from src.configs.environment import get_environment_variables
-
-if TYPE_CHECKING:
-    from src.bot import Bot
 
 
 env = get_environment_variables()

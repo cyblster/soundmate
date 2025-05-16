@@ -1,7 +1,6 @@
 from typing import Optional
 
 import re
-import requests
 from datetime import (
     datetime,
     timedelta,

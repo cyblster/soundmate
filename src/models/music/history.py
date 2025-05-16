@@ -1,4 +1,6 @@
 from typing import List, TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.models import GuildModel
 
 from sqlalchemy import (
     BigInteger,
@@ -15,9 +17,6 @@ from sqlalchemy.dialects.postgresql import insert
 
 from src.configs.postgres import get_async_session
 from src.models import BaseModel
-
-if TYPE_CHECKING:
-    from src.models import GuildModel
 
 
 class HistoryModel(BaseModel):

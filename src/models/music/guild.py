@@ -1,4 +1,6 @@
 from typing import List, TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.models import HistoryModel
 
 from sqlalchemy import (
     String,
@@ -16,9 +18,6 @@ from sqlalchemy.dialects.postgresql import insert
 from src.configs.postgres import get_async_session
 from src.models import BaseModel
 
-if TYPE_CHECKING:
-    from src.models import HistoryModel
-
 
 class GuildModel(BaseModel):
     __tablename__ = 'guild'
@@ -28,7 +27,6 @@ class GuildModel(BaseModel):
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     player_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     queue_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    locale: Mapped[str] = mapped_column(String(length=2), nullable=False)
 
     guild_history: Mapped[List['HistoryModel']] = relationship(back_populates='guild', lazy='selectin')
 
@@ -38,9 +36,8 @@ class GuildModel(BaseModel):
         guild_id: int,
         channel_id: int,
         player_message_id: int,
-        queue_message_id: int,
-        locale: str
-    ) -> None:
+        queue_message_id: int
+    ) -> 'GuildModel':
         async with get_async_session() as session:
             query = (
                 insert(cls)
@@ -48,22 +45,25 @@ class GuildModel(BaseModel):
                     guild_id=guild_id,
                     channel_id=channel_id,
                     player_message_id=player_message_id,
-                    queue_message_id=queue_message_id,
-                    locale=locale
+                    queue_message_id=queue_message_id
                 )
                 .on_conflict_do_update(
                     index_elements=[cls.guild_id],
                     set_=dict(
                         channel_id=channel_id,
                         player_message_id=player_message_id,
-                        queue_message_id=queue_message_id,
-                        locale=locale
+                        queue_message_id=queue_message_id
                     )
                 )
+                .returning(cls)
             )
 
-            await session.execute(query)
+            result = await session.execute(query)
             await session.commit()
+
+            guild_model = result.scalar_one()
+
+            return guild_model
 
     @classmethod
     async def get_all(cls) -> list['GuildModel']:
