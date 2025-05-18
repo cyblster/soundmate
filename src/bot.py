@@ -1,4 +1,5 @@
 import discord
+import lavalink
 from discord.ext import commands
 
 from src.cogs import Music
@@ -15,7 +16,7 @@ class Bot(commands.Bot):
             intents=discord.Intents.all()
         )
 
-        self.lavalink = None
+        self.lavalink: lavalink.Client = None
 
         self.logger = Logger()
         self.logger_handler = self.logger.handlers[0]
