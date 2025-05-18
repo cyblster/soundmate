@@ -60,6 +60,8 @@ class Music(commands.Cog):
                 message_id=queue_message.id
             )
 
+            self.logger.info(f'Ready to play on {len(guild_models)} servers.')
+
     async def create_player(self, guild_model: GuildModel) -> LavalinkPlayer:
         channel = self.bot.get_channel(guild_model.channel_id)
         if channel:
@@ -81,6 +83,8 @@ class Music(commands.Cog):
         player.player_message = player_message
         player.queue_message = queue_message
 
+        self.logger.debug(f'[{player.guild.name}] - Create player on the server.')
+
         return player
 
     async def add_to_queue(
@@ -101,6 +105,12 @@ class Music(commands.Cog):
 
         if player.queue:
             await QueueEmbed.update(self, player)
+
+        self.logger.info(
+            f'[{player.guild.name}] -  Track added to queue'
+            f'({player.current.author} - {player.current.title} [{player.current.uri}] | '
+            f'Requested by: {player.current.requester}) on the server.'
+        )
 
     @discord.app_commands.command(
         name='setup',
@@ -142,13 +152,14 @@ class Music(commands.Cog):
 
         await interaction.delete_original_response()
 
-    async def cog_command_error(self, ctx, error) -> None:
-        self.logger.error(repr(error))
+        self.logger.debug(f'[{interaction.guild.name}] - Successfully installed on the server.')
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         await self.lavalink.player_manager.destroy(guild.id)
         await GuildModel.delete(guild.id)
+
+        self.logger.debug(f'[{guild.name}] - Kicked from the server.')
 
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -189,6 +200,12 @@ class Music(commands.Cog):
 
         player.last = player.current
 
+        self.logger.info(
+            f'[{player.guild.name}] - Playing track '
+            f'({player.current.author} - {player.current.title} [{player.current.uri}] | '
+            f'Requested by: {player.current.requester}) on the server.'
+        )
+
     @lavalink.listener(lavalink.QueueEndEvent)
     async def on_queue_end(self, event: lavalink.QueueEndEvent) -> None:
         player: LavalinkPlayer = event.player
@@ -199,6 +216,8 @@ class Music(commands.Cog):
                 await voice_client.disconnect(force=True)
         else:
             raise PlayerChannelNotFound(self.bot, player.guild_id)
+
+        self.logger.info(f'{player.guild.name} - Queue is over on the server.')
 
     def is_connected(self, guild_id: int):
         player: LavalinkPlayer = self.lavalink.player_manager.get(guild_id)

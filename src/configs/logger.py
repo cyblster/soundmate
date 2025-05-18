@@ -1,5 +1,3 @@
-from typing import Union
-
 import logging
 from dataclasses import dataclass
 
@@ -48,6 +46,3 @@ class Logger(logging.Logger):
 
         self.addHandler(StreamHandler())
         self.setLevel(logging.DEBUG if env.DEBUG else logging.INFO)
-
-    def log(self, log: LogMessage, *args, **kwargs):
-        super().log(log.level, log.message, *args, **kwargs)
