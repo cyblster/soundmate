@@ -30,21 +30,13 @@ class LavalinkClient(discord.Client):
         self.lavalink = lavalink.Client(bot.user.id, player=LavalinkPlayer)
         self.logger = bot.logger
 
-        node_exception = None
-        for attempt in range(retries, 0, -1):
-            try:
-                self.lavalink.add_node(
-                    host=env.LL_HOST,
-                    port=env.LL_PORT,
-                    password=env.LL_PASSWORD,
-                    region=env.LL_REGION,
-                    name='default-node'
-                )
-                break
-            except lavalink.ClientError as node_exception:
-                pass
-        else:
-            raise node_exception
+        self.lavalink.add_node(
+            host=env.LL_HOST,
+            port=env.LL_PORT,
+            password=env.LL_PASSWORD,
+            region=env.LL_REGION,
+            name='default-node'
+        )
 
         self._initialized = True
 
