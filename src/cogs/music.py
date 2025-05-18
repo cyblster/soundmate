@@ -10,13 +10,14 @@ from discord.ext import commands
 from src import utils
 from src.configs.environment import get_environment_variables
 from src.configs.lavalink import (
-    LavalinkClient,
     LavalinkVoiceClient,
     LavalinkPlayer
 )
 from src.configs.language import Emoji, get_application_language
-from src.configs.logger import LogMessage
-from src.models import *
+from src.models import (
+    GuildModel,
+    HistoryModel
+)
 
 
 env = get_environment_variables()
@@ -28,7 +29,9 @@ class Music(commands.Cog):
         super().__init__()
 
         self.bot = bot
+
         self.lavalink = self.bot.lavalink
+        self.logger = self.bot.logger
 
         self.lavalink.add_event_hooks(self)
 
@@ -72,10 +75,11 @@ class Music(commands.Cog):
 
         player: LavalinkPlayer = self.lavalink.player_manager.create(guild_model.guild_id)
 
-        player.store('guild', channel.guild)
-        player.store('channel', channel)
-        player.store('player_message', player_message)
-        player.store('queue_message', queue_message)
+        player.bot = self.bot
+        player.guild = channel.guild
+        player.channel = channel
+        player.player_message = player_message
+        player.queue_message = queue_message
 
         return player
 
@@ -110,10 +114,10 @@ class Music(commands.Cog):
                 delete_after=10
             )
 
-        await interaction.channel.edit(
+        await interaction.channel.edit(**dict(
             topic=lang.SetupCommandChannelTopic.format(name=self.bot.user.name.split("#")[0]),
             overwrites={interaction.guild.default_role: discord.PermissionOverwrite(send_messages=False)}
-        )
+        ))
 
         await interaction.response.send_message(lang.SetupCommandProgressInfo, ephemeral=True)
 
@@ -139,8 +143,7 @@ class Music(commands.Cog):
         await interaction.delete_original_response()
 
     async def cog_command_error(self, ctx, error) -> None:
-        if isinstance(error, commands.CommandError):
-            self.bot.logger.error(repr(error))
+        self.logger.error(repr(error))
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
@@ -190,9 +193,8 @@ class Music(commands.Cog):
     async def on_queue_end(self, event: lavalink.QueueEndEvent) -> None:
         player: LavalinkPlayer = event.player
 
-        guild: discord.Guild = player.fetch('guild')
-        if guild:
-            voice_client = guild.voice_client
+        if player.guild:
+            voice_client = player.guild.voice_client
             if voice_client:
                 await voice_client.disconnect(force=True)
         else:
@@ -323,15 +325,23 @@ class OrderTrackModal(discord.ui.Modal):
         player: LavalinkPlayer = self.cog.lavalink.player_manager.get(interaction.guild_id)
 
         query = self.children[0].value
-        if validators.url(query):
-            search_result = await player.node.get_tracks(query)
-            if search_result.load_type == lavalink.LoadType.EMPTY:
-                raise PlayerRequestNotFound(self.cog.bot, interaction)
-            if search_result.load_type == lavalink.LoadType.ERROR:
-                raise PlayerYTSignatureError(self.cog.bot, interaction)
 
+        is_url = validators.url(query)
+        if not is_url:
+            query = f'ytsearch:{query}'
+
+        search_result = await player.node.get_tracks(query)
+        if search_result.load_type == lavalink.LoadType.ERROR:
+            raise PlayerYTSignatureError(interaction)
+        if search_result.load_type == lavalink.LoadType.EMPTY:
+            await interaction.response.send_message(
+                lang.OrderTrackModalResultEmptyLabel.format(emoji=Emoji.MagRight),
+                ephemeral=True,
+                delete_after=10
+            )
+
+        if is_url:
             await interaction.response.defer()
-
             await self.cog.add_to_queue(
                 interaction.guild_id,
                 interaction.user.voice.channel,
@@ -339,12 +349,6 @@ class OrderTrackModal(discord.ui.Modal):
                 interaction.user.nick
             )
         else:
-            search_result = await player.node.get_tracks(f'ytsearch:{query}')
-            if search_result.load_type == lavalink.LoadType.EMPTY:
-                raise PlayerRequestNotFound(self.cog.bot, interaction)
-            if search_result.load_type == lavalink.LoadType.ERROR:
-                raise PlayerYTSignatureError(self.cog.bot, interaction)
-
             await interaction.response.send_message(
                 embed=TrackSelectEmbed(search_result.tracks[:5]),
                 view=TrackSelectView(self.cog, interaction, search_result.tracks[:5]),
@@ -384,8 +388,6 @@ class TrackSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         await self.interaction.delete_original_response()
 
-        self.player: LavalinkPlayer = self.cog.lavalink.player_manager.get(interaction.guild_id)
-
         await self.cog.add_to_queue(
             interaction.guild_id,
             interaction.user.voice.channel,
@@ -408,7 +410,7 @@ class QueueView(discord.ui.View):
         label=lang.QueueButtonHistory,
         style=discord.ButtonStyle.gray
     )
-    async def btn_history(self, interaction: discord.Interaction, button: discord.Button):
+    async def btn_history(self, interaction: discord.Interaction, _button: discord.Button):
         history_models = await HistoryModel.get(self.guild_id)
 
         await interaction.response.send_message(
@@ -431,12 +433,10 @@ class NothingPlayEmbed(discord.Embed):
 
     @staticmethod
     async def update(cog: Music, player: LavalinkPlayer) -> discord.Message:
-        channel: discord.VoiceChannel = player.fetch('channel')
-        if channel:
-            player_message: discord.Message = player.fetch('player_message')
-            if player_message:
+        if player.channel:
+            if player.player_message:
                 try:
-                    await player_message.edit(
+                    await player.player_message.edit(
                         embed=NothingPlayEmbed(),
                         view=NothingPlayView(cog, player.guild_id)
                     )
@@ -447,7 +447,7 @@ class NothingPlayEmbed(discord.Embed):
         else:
             raise PlayerChannelNotFound(cog.bot, player.guild_id)
 
-        return player_message
+        return player.player_message
 
 
 class PlayNowEmbed(discord.Embed):
@@ -474,12 +474,10 @@ class PlayNowEmbed(discord.Embed):
 
     @staticmethod
     async def update(cog: Music, player: LavalinkPlayer) -> discord.Message:
-        channel: discord.VoiceChannel = player.fetch('channel')
-        if channel:
-            player_message: discord.Message = player.fetch('player_message')
-            if player_message:
+        if player.channel:
+            if player.player_message:
                 try:
-                    await player_message.edit(
+                    await player.player_message.edit(
                         embed=PlayNowEmbed(player.current),
                         view=PlayNowView(cog, player.guild_id)
                     )
@@ -490,7 +488,7 @@ class PlayNowEmbed(discord.Embed):
         else:
             raise PlayerChannelNotFound(cog.bot, player.guild_id)
 
-        return player_message
+        return player.player_message
 
 
 class TrackSelectEmbed(discord.Embed):
@@ -540,12 +538,10 @@ class QueueEmbed(discord.Embed):
 
     @staticmethod
     async def update(cog: Music, player: LavalinkPlayer) -> discord.Message:
-        channel: discord.VoiceChannel = player.fetch('channel')
-        if channel:
-            queue_message: discord.Message = player.fetch('queue_message')
-            if queue_message:
+        if player.channel:
+            if player.queue_message:
                 try:
-                    await queue_message.edit(
+                    await player.queue_message.edit(
                         embed=QueueEmbed(player.queue),
                         view=QueueView(player.guild_id)
                     )
@@ -556,7 +552,7 @@ class QueueEmbed(discord.Embed):
         else:
             raise PlayerChannelNotFound(cog.bot, player.guild_id)
 
-        return queue_message
+        return player.queue_message
 
 
 class HistoryEmbed(discord.Embed):
@@ -587,8 +583,6 @@ class PlayerEntityNotFound(commands.CommandError):
     def __init__(self, bot: 'Bot', guild_id: int, *, message: str):
         super().__init__(message)
 
-        bot.logger.error(message)
-
         bot.loop.create_task(GuildModel.delete(guild_id))
 
 
@@ -607,17 +601,6 @@ class QueueMessageNotFound(PlayerEntityNotFound):
         super().__init__(bot, guild_id, message='Queue message not found')
 
 
-class PlayerRequestNotFound(commands.CommandError):
-    def __init__(self, bot: 'Bot', interaction: discord.Interaction):
-        super().__init__(message='Tracks not found')
-
-        bot.loop.create_task(interaction.response.send_message(
-            lang.OrderTrackModalResultEmptyLabel.format(emoji=Emoji.MagRight),
-            ephemeral=True,
-            delete_after=10
-        ))
-
-
 class PlayerYTSignatureError(commands.CommandError):
-    def __init__(self, bot: 'Bot', interaction: discord.Interaction):
+    def __init__(self, interaction: discord.Interaction):
         super().__init__(message='Outdated YouTube plugin signature')

@@ -25,13 +25,21 @@ class StreamHandler(logging.StreamHandler):
 
 
 @dataclass
-class Log:
-    level: Union[int, str]
-    text: str
+class LogLevel:
+    CRITICAL = 50
+    FATAL = CRITICAL
+    ERROR = 40
+    WARNING = 30
+    WARN = WARNING
+    INFO = 20
+    DEBUG = 10
+    NOTSET = 0
 
-    @classmethod
-    def format(cls, **kwargs) -> 'Log':
-        return Log(cls.level, cls.text.format(**kwargs))
+
+class LogMessage:
+    def __init__(self, level: LogLevel, message: str):
+        self.level = level
+        self.message = message
 
 
 class Logger(logging.Logger):
@@ -41,11 +49,5 @@ class Logger(logging.Logger):
         self.addHandler(StreamHandler())
         self.setLevel(logging.DEBUG if env.DEBUG else logging.INFO)
 
-    def log(self, log: Log, *args, **kwargs):
-        super().log(log.level, log.text, *args, **kwargs)
-
-
-class LogMessage:
-    INIT_UI_TASK_CREATED = Log(logging.DEBUG, 'Init ui task created')
-    YOUTUBE_SEARCH_FAILURE = Log(logging.ERROR, 'Youtube search failure')
-    USER_ADDED_TRACK_TO_QUEUE = Log(logging.INFO, 'User added track to queue')
+    def log(self, log: LogMessage, *args, **kwargs):
+        super().log(log.level, log.message, *args, **kwargs)

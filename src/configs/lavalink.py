@@ -21,21 +21,30 @@ class LavalinkClient(discord.Client):
 
         return cls._instance
 
-    def __init__(self, bot: 'Bot'):
+    def __init__(self, bot: 'Bot', retries: int = 5):
         if self._initialized:
             return
 
         super().__init__(intents=bot.intents)
 
         self.lavalink = lavalink.Client(bot.user.id, player=LavalinkPlayer)
+        self.logger = bot.logger
 
-        self.lavalink.add_node(
-            host=env.LL_HOST,
-            port=env.LL_PORT,
-            password=env.LL_PASSWORD,
-            region=env.LL_REGION,
-            name='default-node'
-        )
+        node_exception = None
+        for attempt in range(retries, 0, -1):
+            try:
+                self.lavalink.add_node(
+                    host=env.LL_HOST,
+                    port=env.LL_PORT,
+                    password=env.LL_PASSWORD,
+                    region=env.LL_REGION,
+                    name='default-node'
+                )
+                break
+            except lavalink.ClientError as node_exception:
+                pass
+        else:
+            raise node_exception
 
         self._initialized = True
 
@@ -53,6 +62,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         super().__init__(client, voice_channel)
 
         self.lavalink = client.lavalink
+        self.logger = client.logger
         self.guild_id = voice_channel.guild.id
 
     async def on_voice_server_update(self, data):
@@ -83,6 +93,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         self_mute: bool = False
     ) -> None:
         self.lavalink.player_manager.create(guild_id=self.channel.guild.id)
+
         await self.channel.guild.change_voice_state(
             channel=self.channel,
             self_deaf=self_deaf,
@@ -90,7 +101,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         )
 
     async def disconnect(self, *, force: bool = True) -> None:
-        player = self.lavalink.player_manager.get(self.channel.guild.id)
+        player: LavalinkPlayer = self.lavalink.player_manager.get(self.channel.guild.id)
 
         if not force and not player.is_connected:
             return
@@ -110,5 +121,12 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
 class LavalinkPlayer(lavalink.DefaultPlayer):
     def __init__(self, guild_id, node):
         super().__init__(guild_id, node)
+
+        self.bot: 'Bot' = None
+
+        self.guild: discord.Guild = None
+        self.channel: discord.TextChannel = None
+        self.player_message: discord.Message = None
+        self.queue_message: discord.Message = None
 
         self.last: lavalink.AudioTrack = None
