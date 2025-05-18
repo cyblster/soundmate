@@ -21,7 +21,7 @@ class LavalinkClient(discord.Client):
 
         return cls._instance
 
-    def __init__(self, bot: 'Bot', retries: int = 5):
+    def __init__(self, bot: 'Bot'):
         if self._initialized:
             return
 
