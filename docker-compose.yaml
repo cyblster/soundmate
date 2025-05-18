@@ -1,0 +1,58 @@
+services:
+  soundmate-bot:
+    container_name: "soundmate-bot"
+    env_file: .env
+    build: .
+    depends_on:
+      soundmate-pg:
+        condition: service_healthy
+    restart: always
+    networks:
+      - soundmate-net
+
+  soundmate-pg:
+    container_name: "soundmate-pg"
+    image: postgres:15
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB}
+    ports:
+      - ${PG_PORT:-5432}:5432
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - soundmate-net
+
+  soundmate-ll:
+    container_name: "soundmate-ll"
+    image: ghcr.io/lavalink-devs/lavalink:4
+    env_file: .env
+    environment:
+      _JAVA_OPTIONS: "-Xmx256M"
+      SERVER_HOST: ${LL_HOST}
+      SERVER_PORT: ${LL_PORT:-2333}
+      LAVALINK_SERVER_PASSWORD: ${LL_PASSWORD}
+    ports:
+      - ${LL_PORT:-2333}:2333
+    volumes:
+      - ./lavalink/application.yaml:/opt/Lavalink/application.yaml
+      - ./lavalink/plugins:/opt/Lavalink/plugins
+    restart: always
+    networks:
+      - soundmate-net
+
+networks:
+  soundmate-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+    external: false
