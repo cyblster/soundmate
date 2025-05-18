@@ -36,7 +36,7 @@ services:
     image: ghcr.io/lavalink-devs/lavalink:4
     env_file: .env
     environment:
-      _JAVA_OPTIONS: "-Xmx256M"
+      _JAVA_OPTIONS: ${LL_OPTIONS}
       SERVER_HOST: ${LL_HOST}
       SERVER_PORT: ${LL_PORT:-2333}
       LAVALINK_SERVER_PASSWORD: ${LL_PASSWORD}

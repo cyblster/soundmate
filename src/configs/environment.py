@@ -1,5 +1,3 @@
-from typing import Optional
-
 from functools import lru_cache
 from pydantic_settings import BaseSettings
 
@@ -19,6 +17,7 @@ class EnvironmentSettings(BaseSettings):
     LL_PORT: int = 2333
     LL_PASSWORD: str
     LL_REGION: str
+    LL_OPTIONS: str = '-Xmx512M'
 
     LOCALE: str = 'en'
 
