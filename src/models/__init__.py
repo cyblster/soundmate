@@ -30,7 +30,5 @@ class BaseModel(DeclarativeBase):
     })
 
 
-from .music import (
-    HistoryModel,
-    GuildModel
-)
+from .guild import GuildModel
+from .history import HistoryModel
