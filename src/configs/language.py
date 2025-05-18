@@ -69,10 +69,48 @@ class Russian(Language):
 
 
 class English(Language):
-    TrackSelectPlaceholder = 'Choose variant'
+    SetupCommandDescription = 'Set the current channel as the music one'
+    SetupCommandPermissionNotify = '{emoji} Command available to server admins only.'
+    SetupCommandChannelTopic = 'Music channel of {name}'
+    SetupCommandProgressInfo = 'Setting up...'
+
+    PlayerButtonAdd = 'Add'
+    PlayerButtonSkip = 'Skip'
+    PlayerButtonDisconnect = 'Disconnect'
+
+    UserNotConnected = '{emoji} You are not connected to a voice channel.'
+    BotAlreadyConnected = '{emoji} Bot is already in a voice channel.'
+
+    OrderTrackModalTitle = 'Add a track to queue'
+    OrderTrackModalQueryLabel = 'Enter a search term or URL'
+
+    OrderTrackModalResultEmptyLabel = '{emoji} Nothing found for your query.'
+
+    TrackSelectPlaceholder = 'Pick one'
+
+    QueueButtonHistory = 'History'
+
+    NothingPlayEmbedTitle = 'Nothing is playing now'
+    NothingPlayEmbedHintFieldName = 'Tip:'
+    NothingPlayEmbedHintFieldValue = 'Press **“Add”** to play a track'
+
+    PlayEmbedRequesterFieldName = 'Requested by:'
+    PlayEmbedDurationFieldName = 'Length:'
+
+    TrackSelectEmbedTitle = 'Search results:'
+
+    QueueEmbedTitle = 'Queue'
+    QueueEmbedHintFieldName = 'Queue is empty.'
+    QueueEmbedHintFieldValue = 'Press **“Add”** to enqueue a track'
+    QueueEmbedOverflowFieldName = 'And a few more tracks ({count})'
+    QueueEmbedOverflowFieldValue = QueueEmbedHintFieldValue
+
+    HistoryEmbedTitle = 'History'
+    HistoryEmbedHintFieldName = 'History is empty.'
+    HistoryEmbedHintFieldValue = QueueEmbedHintFieldValue
 
 
-SuportedLocale = Literal[
+SupportedLocale = Literal[
     'en',
     'ru'
 ]
@@ -81,13 +119,14 @@ SupportedLanguage = Union[
     Russian
 ]
 
+
 @dataclass
 class LanguageManager:
     en = English
     ru = Russian
 
     @classmethod
-    def get(cls, locale: SuportedLocale) -> SupportedLanguage:
+    def get(cls, locale: SupportedLocale) -> SupportedLanguage:
         try:
             return getattr(cls, locale)()
         except AttributeError:
@@ -98,7 +137,7 @@ class UnsupportedLocaleError(AttributeError):
     def __init__(self, locale: str):
         super().__init__(
             f'Unsupported locale: {locale}. '
-            f'Supported locales are: {", ".join(get_args(SuportedLocale))}'
+            f'Supported locales are: {", ".join(get_args(SupportedLocale))}'
         )
 
 
