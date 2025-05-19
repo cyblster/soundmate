@@ -33,12 +33,15 @@ class Music(commands.Cog):
         self.lavalink = self.bot.lavalink
         self.logger = self.bot.logger
 
+        self.lavalink_node_ready = False
         self.lavalink.add_event_hooks(self)
 
-        self.bot.loop.create_task(self.do_when_ready())
+    @lavalink.listener()
+    async def on_node_ready(self, _event: lavalink.NodeReadyEvent):
+        if self.lavalink_node_ready:
+            return
 
-    async def do_when_ready(self):
-        await self.bot.wait_until_ready()
+        self.lavalink_node_ready = True
 
         guild_models = await GuildModel.get_all()
         for guild_model in guild_models:
@@ -60,7 +63,7 @@ class Music(commands.Cog):
                 message_id=queue_message.id
             )
 
-            self.logger.info(f'Ready to play on {len(guild_models)} servers.')
+        self.logger.info(f'Ready to play on {len(guild_models)} servers.')
 
     async def create_player(self, guild_model: GuildModel) -> LavalinkPlayer:
         channel = self.bot.get_channel(guild_model.channel_id)
