@@ -365,6 +365,7 @@ class OrderTrackModal(discord.ui.Modal):
             )
 
         if is_url:
+            await interaction.delete_original_response()
             await self.cog.add_to_queue(
                 interaction.guild_id,
                 interaction.user.voice.channel,
