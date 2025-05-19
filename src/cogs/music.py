@@ -107,7 +107,7 @@ class Music(commands.Cog):
             await QueueEmbed.update(self, player)
 
         self.logger.info(
-            f'[{player.guild.name}] -  Track added to queue'
+            f'[{player.guild.name}] - Track added to queue'
             f'({player.current.author} - {player.current.title} [{player.current.uri}] | '
             f'Requested by: {player.current.requester}) on the server.'
         )
@@ -349,6 +349,8 @@ class OrderTrackModal(discord.ui.Modal):
         if not is_url:
             query = f'ytsearch:{query}'
 
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
         search_result = await player.node.get_tracks(query)
         if search_result.load_type == lavalink.LoadType.ERROR:
             raise PlayerYTSignatureError(interaction)
@@ -360,7 +362,6 @@ class OrderTrackModal(discord.ui.Modal):
             )
 
         if is_url:
-            await interaction.response.defer()
             await self.cog.add_to_queue(
                 interaction.guild_id,
                 interaction.user.voice.channel,
@@ -368,11 +369,10 @@ class OrderTrackModal(discord.ui.Modal):
                 interaction.user.nick
             )
         else:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=TrackSelectEmbed(search_result.tracks[:5]),
                 view=TrackSelectView(self.cog, interaction, search_result.tracks[:5]),
-                ephemeral=True,
-                delete_after=30
+                ephemeral=True
             )
 
 
@@ -380,12 +380,20 @@ class TrackSelectView(discord.ui.View):
     def __init__(self, cog: Music, interaction: discord.Interaction, tracks: List[lavalink.AudioTrack]):
         self.interaction = interaction
 
-        super().__init__(timeout=None)
+        super().__init__(timeout=30)
 
         self.add_item(TrackSelect(cog, interaction, tracks))
 
+        self.track_selected = False
+
+    async def on_timeout(self) -> None:
+        if not self.track_selected:
+            await self.interaction.delete_original_response()
+
 
 class TrackSelect(discord.ui.Select):
+    view: TrackSelectView
+
     def __init__(
         self,
         cog: Music,
@@ -405,7 +413,7 @@ class TrackSelect(discord.ui.Select):
         ])
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await self.interaction.delete_original_response()
+        self.view.track_selected = True
 
         await self.cog.add_to_queue(
             interaction.guild_id,
@@ -414,7 +422,7 @@ class TrackSelect(discord.ui.Select):
             requester=interaction.user.nick
         )
 
-        await interaction.response.defer()
+        await self.interaction.delete_original_response()
 
 
 class QueueView(discord.ui.View):
