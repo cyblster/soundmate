@@ -92,7 +92,8 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
             self_mute=self_mute
         )
 
-        self.logger.debug(f'[{player.guild.name}] - Connected to the guild.')
+        guild = self.client.get_guild(player.guild_id)
+        self.logger.debug(f'[{guild.name}] - Connected to the guild.')
 
     async def disconnect(self, *, force: bool = True) -> None:
         player: LavalinkPlayer = self.lavalink.player_manager.get(self.channel.guild.id)
@@ -105,7 +106,8 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         player.channel_id = None
         await self._refresh()
 
-        self.logger.debug(f'[{player.guild.name}] - Disconnected from the guild.')
+        guild = self.client.get_guild(player.guild_id)
+        self.logger.debug(f'[{guild.name}] - Disconnected from the guild.')
 
     async def _refresh(self):
         self.cleanup()
@@ -119,10 +121,5 @@ class LavalinkPlayer(lavalink.DefaultPlayer):
         super().__init__(guild_id, node)
 
         self.bot: 'Bot' = None
-
-        self.guild: discord.Guild = None
-        self.channel: discord.TextChannel = None
-        self.player_message: discord.Message = None
-        self.queue_message: discord.Message = None
 
         self.last: lavalink.AudioTrack = None

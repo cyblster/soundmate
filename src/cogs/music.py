@@ -47,20 +47,20 @@ class Music(commands.Cog):
         for guild_model in guild_models:
             player: LavalinkPlayer = await self.create_player(guild_model)
 
-            player_message = await NothingPlayEmbed.update(self, player)
+            player_message_id = await NothingPlayEmbed.update(self, player.guild_id)
             self.bot.add_view(
                 view=NothingPlayView(self, player.guild_id),
-                message_id=player_message.id
+                message_id=player_message_id
             )
             self.bot.add_view(
                 view=PlayNowView(self, player.guild_id),
-                message_id=player_message.id
+                message_id=player_message_id
             )
 
-            queue_message = await QueueEmbed.update(self, player)
+            queue_message_id = await QueueEmbed.update(self, player.guild_id)
             self.bot.add_view(
                 view=QueueView(player.guild_id),
-                message_id=queue_message.id
+                message_id=queue_message_id
             )
 
         self.logger.info(f'Ready to play on {len(guild_models)} servers.')
@@ -73,7 +73,7 @@ class Music(commands.Cog):
                 raise PlayerMessageNotFound(self.bot, guild_model.guild_id)
 
             queue_message = channel.get_partial_message(guild_model.queue_message_id)
-            if not player_message:
+            if not queue_message:
                 raise QueueMessageNotFound(self.bot, guild_model.guild_id)
         else:
             raise PlayerChannelNotFound(self.bot, guild_model.guild_id)
@@ -81,12 +81,9 @@ class Music(commands.Cog):
         player: LavalinkPlayer = self.lavalink.player_manager.create(guild_model.guild_id)
 
         player.bot = self.bot
-        player.guild = channel.guild
-        player.channel = channel
-        player.player_message = player_message
-        player.queue_message = queue_message
 
-        self.logger.debug(f'[{player.guild.name}] - Create player on the server.')
+        guild = self.bot.get_guild(guild_model.guild_id)
+        self.logger.debug(f'[{guild.name}] - Create player on the server.')
 
         return player
 
@@ -107,10 +104,11 @@ class Music(commands.Cog):
             await player.play()
 
         if player.queue:
-            await QueueEmbed.update(self, player)
+            await QueueEmbed.update(self, player.guild_id, player.queue)
 
+        guild = self.bot.get_guild(player.guild_id)
         self.logger.info(
-            f'[{player.guild.name}] - Track added to queue'
+            f'[{guild.name}] - Track added to queue'
             f'({player.current.author} - {player.current.title} [{player.current.uri}] | '
             f'Requested by: {player.current.requester}) on the server.'
         )
@@ -177,10 +175,10 @@ class Music(commands.Cog):
 
                 player.queue.clear()
 
-                await NothingPlayEmbed.update(self, player)
-                await QueueEmbed.update(self, player)
+                await NothingPlayEmbed.update(self, before.channel.guild.id)
+                await QueueEmbed.update(self, before.channel.guild.id)
         elif before.channel:
-            voice_client = before.channel.guild.voice_client
+            voice_client: LavalinkVoiceClient = before.channel.guild.voice_client
             if voice_client and before.channel == voice_client.channel:
                 if len(before.channel.members) == 1 and before.channel.members[0] == self.bot.user:
                     await voice_client.disconnect(force=True)
@@ -189,10 +187,8 @@ class Music(commands.Cog):
     async def on_track_start(self, event: lavalink.TrackStartEvent) -> None:
         player: LavalinkPlayer = event.player
 
-        if not player.last or player.current.identifier != player.last.identifier:
-            await PlayNowEmbed.update(self, player)
-
-        await QueueEmbed.update(self, player)
+        await PlayNowEmbed.update(self, player.guild_id, player.current)
+        await QueueEmbed.update(self, player.guild_id, player.queue)
 
         await HistoryModel.add(
             player.guild_id,
@@ -203,8 +199,9 @@ class Music(commands.Cog):
 
         player.last = player.current
 
+        guild = self.bot.get_guild(player.guild_id)
         self.logger.info(
-            f'[{player.guild.name}] - Playing track '
+            f'[{guild.name}] - Playing track '
             f'({player.current.author} - {player.current.title} [{player.current.uri}] | '
             f'Requested by: {player.current.requester}) on the server.'
         )
@@ -213,19 +210,20 @@ class Music(commands.Cog):
     async def on_queue_end(self, event: lavalink.QueueEndEvent) -> None:
         player: LavalinkPlayer = event.player
 
-        if player.guild:
-            voice_client = player.guild.voice_client
+        guild = self.bot.get_guild(player.guild_id)
+        if guild:
+            voice_client = guild.voice_client
             if voice_client:
                 await voice_client.disconnect(force=True)
         else:
             raise PlayerChannelNotFound(self.bot, player.guild_id)
 
-        self.logger.info(f'{player.guild.name} - Queue is over on the server.')
+        self.logger.info(f'{guild.name} - Queue is over on the server.')
 
-    def is_connected(self, guild_id: int):
+    def is_playing(self, guild_id: int):
         player: LavalinkPlayer = self.lavalink.player_manager.get(guild_id)
 
-        return player.is_connected
+        return player.is_playing
 
 
 class PlayView(discord.ui.View):
@@ -290,7 +288,7 @@ class NothingPlayView(PlayView):
                 ephemeral=True,
                 delete_after=10
             )
-        if self.cog.is_connected(interaction.guild_id) and not self.cog.bot.is_user_with_bot(interaction.user):
+        if self.cog.is_playing(interaction.guild_id) and not self.cog.bot.is_user_with_bot(interaction.user):
             return await interaction.response.send_message(
                 lang.BotAlreadyConnected.format(emoji=Emoji.NoEntry),
                 ephemeral=True,
@@ -463,22 +461,26 @@ class NothingPlayEmbed(discord.Embed):
         )
 
     @staticmethod
-    async def update(cog: Music, player: LavalinkPlayer) -> discord.Message:
-        if player.channel:
-            if player.player_message:
+    async def update(cog: Music, guild_id: int) -> int:
+        guild_model = await GuildModel.get(guild_id)
+
+        channel: discord.TextChannel = cog.bot.get_channel(guild_model.channel_id)
+        if channel:
+            player_message = channel.get_partial_message(guild_model.player_message_id)
+            if player_message:
                 try:
-                    await player.player_message.edit(
+                    await player_message.edit(
                         embed=NothingPlayEmbed(),
-                        view=NothingPlayView(cog, player.guild_id)
+                        view=NothingPlayView(cog, guild_id)
                     )
                 except discord.errors.NotFound:
-                    raise PlayerMessageNotFound(cog.bot, player.guild_id)
+                    raise PlayerMessageNotFound(cog.bot, guild_id)
             else:
-                raise PlayerMessageNotFound(cog.bot, player.guild_id)
+                raise PlayerMessageNotFound(cog.bot, guild_id)
         else:
-            raise PlayerChannelNotFound(cog.bot, player.guild_id)
+            raise PlayerChannelNotFound(cog.bot, guild_id)
 
-        return player.player_message
+        return player_message.id
 
 
 class PlayNowEmbed(discord.Embed):
@@ -504,22 +506,26 @@ class PlayNowEmbed(discord.Embed):
         self.set_footer(text='YouTube')
 
     @staticmethod
-    async def update(cog: Music, player: LavalinkPlayer) -> discord.Message:
-        if player.channel:
-            if player.player_message:
+    async def update(cog: Music, guild_id: int, track: lavalink.AudioTrack) -> int:
+        guild_model = await GuildModel.get(guild_id)
+
+        channel: discord.TextChannel = cog.bot.get_channel(guild_model.channel_id)
+        if channel:
+            player_message = channel.get_partial_message(guild_model.player_message_id)
+            if player_message:
                 try:
-                    await player.player_message.edit(
-                        embed=PlayNowEmbed(player.current),
-                        view=PlayNowView(cog, player.guild_id)
+                    await player_message.edit(
+                        embed=PlayNowEmbed(track),
+                        view=PlayNowView(cog, guild_id)
                     )
                 except discord.errors.NotFound:
-                    raise PlayerMessageNotFound(cog.bot, player.guild_id)
+                    raise PlayerMessageNotFound(cog.bot, guild_id)
             else:
-                raise PlayerMessageNotFound(cog.bot, player.guild_id)
+                raise PlayerMessageNotFound(cog.bot, guild_id)
         else:
-            raise PlayerChannelNotFound(cog.bot, player.guild_id)
+            raise PlayerChannelNotFound(cog.bot, guild_id)
 
-        return player.player_message
+        return player_message.id
 
 
 class TrackSelectEmbed(discord.Embed):
@@ -568,22 +574,26 @@ class QueueEmbed(discord.Embed):
             )
 
     @staticmethod
-    async def update(cog: Music, player: LavalinkPlayer) -> discord.Message:
-        if player.channel:
-            if player.queue_message:
+    async def update(cog: Music, guild_id: int, queue: List[lavalink.AudioTrack] = None) -> int:
+        guild_model = await GuildModel.get(guild_id)
+
+        channel: discord.TextChannel = cog.bot.get_channel(guild_model.channel_id)
+        if channel:
+            queue_message = channel.get_partial_message(guild_model.queue_message_id)
+            if queue_message:
                 try:
-                    await player.queue_message.edit(
-                        embed=QueueEmbed(player.queue),
-                        view=QueueView(player.guild_id)
+                    await queue_message.edit(
+                        embed=QueueEmbed(queue),
+                        view=QueueView(guild_id)
                     )
                 except discord.errors.NotFound:
-                    raise PlayerMessageNotFound(cog.bot, player.guild_id)
+                    raise PlayerMessageNotFound(cog.bot, guild_id)
             else:
-                raise PlayerMessageNotFound(cog.bot, player.guild_id)
+                raise PlayerMessageNotFound(cog.bot, guild_id)
         else:
-            raise PlayerChannelNotFound(cog.bot, player.guild_id)
+            raise PlayerChannelNotFound(cog.bot, guild_id)
 
-        return player.queue_message
+        return queue_message.id
 
 
 class HistoryEmbed(discord.Embed):
