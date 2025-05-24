@@ -84,7 +84,7 @@ class LavalinkVoiceClient(discord.VoiceProtocol):
         self_deaf: bool = True,
         self_mute: bool = False
     ) -> None:
-        player: LavalinkPlayer = self.lavalink.player_manager.create(guild_id=self.channel.guild.id)
+        player: LavalinkPlayer = self.lavalink.player_manager.get(self.channel.guild.id)
 
         await self.channel.guild.change_voice_state(
             channel=self.channel,

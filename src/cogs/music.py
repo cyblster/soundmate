@@ -223,7 +223,7 @@ class Music(commands.Cog):
     def is_playing(self, guild_id: int):
         player: LavalinkPlayer = self.lavalink.player_manager.get(guild_id)
 
-        return player.is_playing
+        return len(player.queue) > 0
 
 
 class PlayView(discord.ui.View):
