@@ -1,0 +1,1 @@
+ALTER TABLE guild ALTER COLUMN queue_message_id DROP NOT NULL;
