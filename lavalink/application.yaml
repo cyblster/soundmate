@@ -1,0 +1,39 @@
+lavalink:
+  server:
+    sources:
+      youtube: false
+    bufferDurationMs: 1000
+    frameBufferDurationMs: 10000
+    nonAllocatingFrameBuffer: true
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+    gc-warnings: true
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177"
+      snapshot: true
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - MUSIC
+      - ANDROID
+      - IOS
+      - TVHTML5_SIMPLY
+      - ANDROID_VR
+      - MWEB
+      - WEB
+      - WEBEMBEDDED
+
+spring:
+  output:
+    ansi:
+      enabled: ALWAYS
+
+logging:
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS,UTC}){faint} %clr(%-5level) %clr(lavalink ){magenta} %-40msg logger=%logger{0}%n"

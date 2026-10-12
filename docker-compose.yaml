@@ -1,0 +1,76 @@
+name: soundmate
+
+services:
+  soundmate-bot:
+    container_name: soundmate-bot
+    image: soundmate:latest
+    build: .
+    env_file: .env
+    depends_on:
+      soundmate-pg:
+        condition: service_healthy
+      soundmate-ll:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - soundmate-net
+      - soundmate-db
+
+  soundmate-pg:
+    container_name: soundmate-pg
+    image: postgres:15
+    entrypoint: ["bash", "/usr/local/bin/soundmate-entrypoint.sh"]
+    command: ["postgres"]
+    environment:
+      POSTGRES_USER: soundmate
+      POSTGRES_PASSWORD: soundmate
+      POSTGRES_DB: soundmate
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/entrypoint.sh:/usr/local/bin/soundmate-entrypoint.sh:ro
+    restart: unless-stopped
+    logging: *logging
+    networks:
+      - soundmate-db
+
+  soundmate-ll:
+    container_name: soundmate-ll
+    image: ghcr.io/lavalink-devs/lavalink:4
+    environment:
+      _JAVA_OPTIONS: ${LL_OPTIONS:--Xmx512M}
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 2333
+      LAVALINK_SERVER_PASSWORD: soundmate
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -o /dev/null -H \"Authorization: $${LAVALINK_SERVER_PASSWORD}\" http://127.0.0.1:2333/version"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    volumes:
+      - ./lavalink/application.yaml:/opt/Lavalink/application.yaml:ro
+    restart: unless-stopped
+    logging: *logging
+    networks:
+      - soundmate-net
+
+networks:
+  soundmate-net:
+    driver: bridge
+  soundmate-db:
+    driver: bridge
+    internal: true
+
+volumes:
+  pg_data:
